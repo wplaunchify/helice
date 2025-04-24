@@ -1,0 +1,103 @@
+<?php
+/**
+ * Helice ID User Management
+ * 
+ * Assigns a sequential 5-digit ID to new users starting from 1000.
+ * Field editing is handled by ACF Pro.
+ * Adds a sortable Helice ID column to the users list.
+ */
+add_action('init', 'helice_id_setup');
+
+function helice_id_setup() {
+    // Generate and assign Helice ID when a new user is created
+    add_action('user_register', 'assign_helice_id_to_new_user');
+    
+    // Add the Helice ID column to the users admin list
+    add_filter('manage_users_columns', 'add_helice_id_column');
+    add_filter('manage_users_sortable_columns', 'make_helice_id_column_sortable');
+    add_filter('pre_get_users', 'sort_users_by_helice_id');
+    add_action('manage_users_custom_column', 'display_helice_id_column_content', 10, 3);
+}
+
+/**
+ * Assigns a new Helice ID to newly created users
+ */
+function assign_helice_id_to_new_user($user_id) {
+    // Check if the user already has a Helice ID
+    $existing_id = get_user_meta($user_id, 'helice_id', true);
+    
+    if (!empty($existing_id)) {
+        return; // User already has an ID, so don't assign a new one
+    }
+    
+    // Get the next available Helice ID
+    $next_id = get_next_helice_id();
+    
+    // Assign the ID to the user
+    update_user_meta($user_id, 'helice_id', $next_id);
+}
+
+/**
+ * Determines the next available Helice ID 
+ */
+function get_next_helice_id() {
+    global $wpdb;
+    
+    // Get the highest existing Helice ID from user meta
+    $highest_id = $wpdb->get_var(
+        "SELECT MAX(CAST(meta_value AS SIGNED)) 
+        FROM {$wpdb->usermeta} 
+        WHERE meta_key = 'helice_id'"
+    );
+    
+    // If no IDs exist yet, start from 1000
+    if (is_null($highest_id) || $highest_id < 1000) {
+        return 1000;
+    }
+    
+    // Otherwise, increment the highest existing ID
+    return $highest_id + 1;
+}
+
+/**
+ * Adds the Helice ID column to the users list
+ */
+function add_helice_id_column($columns) {
+    $columns['helice_id'] = 'Helice ID';
+    return $columns;
+}
+
+/**
+ * Makes the Helice ID column sortable
+ */
+function make_helice_id_column_sortable($columns) {
+    $columns['helice_id'] = 'helice_id';
+    return $columns;
+}
+
+/**
+ * Displays the Helice ID in the custom column
+ */
+function display_helice_id_column_content($value, $column_name, $user_id) {
+    if ('helice_id' === $column_name) {
+        $helice_id = get_user_meta($user_id, 'helice_id', true);
+        return $helice_id ? $helice_id : '—';
+    }
+    return $value;
+}
+
+/**
+ * Modifies the users query to support sorting by Helice ID
+ */
+function sort_users_by_helice_id($query) {
+    if (!is_admin()) {
+        return;
+    }
+    
+    $orderby = $query->get('orderby');
+    
+    if ('helice_id' === $orderby) {
+        $query->set('meta_key', 'helice_id');
+        $query->set('orderby', 'meta_value_num'); // Sort numerically
+    }
+}
